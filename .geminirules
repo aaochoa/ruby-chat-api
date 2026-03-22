@@ -1,0 +1,1468 @@
+---
+name: rails-api-controllers
+description: "Use when: writing or reviewing Rails API controllers. Best practices for request handling, response formatting, authentication, error handling, and pagination."
+applyTo:
+  - "app/controllers/**/*.rb"
+---
+
+# Rails API Controllers
+
+## Architecture
+
+### Single Responsibility & RESTful Routes
+
+- Each controller handles one domain/resource. Use nested routes for sub-resources
+- Move business logic to services, models, or decorators (skinny controllers)
+- Follow REST conventions (GET, POST, PUT/PATCH, DELETE for index, create, show, update, destroy)
+- Always respond with JSON only; avoid XML unless explicitly required
+
+### Consistent Response Format
+
+```ruby
+{ data: { ... }, meta: { }, errors: [ ] }
+```
+
+## Request Handling
+
+### Parameters
+
+- **Strong Parameters**: Always use `params.require(:resource).permit(:attr1, :attr2)`
+- **Validation First**: Validate in model; check in controller only for authorization/access
+- **Pagination**: Default 25-50 items; include `page`, `per_page` in params
+- **Filtering**: Use query params for filters: `/api/items?category=books&status=active`
+- **Sorting**: Support sort param: `/api/items?sort=-created_at,name`
+
+### Error Handling
+
+```ruby
+# Standard HTTP error codes:
+# 400 Bad Request - validation errors or malformed params
+# 401 Unauthorized - missing/invalid credentials
+# 403 Forbidden - authenticated but not authorized
+# 404 Not Found - resource doesn't exist
+# 422 Unprocessable Entity - validation failed
+# 500 Internal Server Error - code error (don't expose details)
+```
+
+**Never expose secrets, stack traces, or internal structure in error messages**
+
+### Authentication & Authorization
+
+- **Bearer Tokens**: Use `Authorization: Bearer <token>` header
+- **Check Before Action**: Use `before_action :authenticate_user!` in controllers
+- **Pundit/CanCanCan**: Use authorization gems for complex permission logic
+- **Scope Queries**: Never return data user shouldn't see (use scopes: `current_user.items`)
+
+## Response Format
+
+### Success Responses
+
+```ruby
+# 200 OK (GET, PUT, PATCH)
+{ data: { id: 1, name: "Item", ... }, meta: { ... } }
+
+# 201 Created (POST)
+render json: @resource, status: :created, location: @resource
+
+# 204 No Content (DELETE)
+head :no_content
+```
+
+### Error Responses
+
+```ruby
+# Validation errors
+{
+  errors: [
+    { field: "email", message: "has already been taken" },
+    { field: "password", message: "is too short (minimum is 8 characters)" }
+  ]
+}
+
+# Operational errors
+{
+  error: "Resource not found",
+  code: "NOT_FOUND"
+}
+```
+
+## Pagination Response Pattern
+
+```ruby
+def index
+  @items = current_user.items.page(params[:page]).per(params[:per_page] || 25)
+  render json: @items, meta: pagination_meta(@items), adapter: :json
+end
+
+private
+
+def pagination_meta(collection)
+  {
+    page: collection.current_page,
+    per_page: collection.limit_value,
+    total_pages: collection.total_pages,
+    total_count: collection.total_count
+  }
+end
+```
+
+## Error Handling Middleware Pattern
+
+```ruby
+class Api::V1::ApplicationController < ActionController::API
+  include ActionController::Serialization
+
+  before_action :authenticate_user!
+  rescue_from StandardError, with: :handle_error
+  rescue_from ActiveRecord::RecordNotFound, with: :handle_not_found
+  rescue_from Pundit::NotAuthorizedError, with: :handle_forbidden
+
+  private
+
+  def authenticate_user!
+    token = request.headers['Authorization']&.split(' ')&.last
+    @current_user = User.find_by(id: decode_jwt(token)[:user_id]) if token
+    render json: { error: 'Unauthorized' }, status: :unauthorized unless @current_user
+  end
+
+  def handle_not_found(exception)
+    render json: { error: 'Not found', code: 'NOT_FOUND' }, status: :not_found
+  end
+
+  def handle_forbidden(exception)
+    render json: { error: 'Forbidden', code: 'FORBIDDEN' }, status: :forbidden
+  end
+
+  def handle_error(exception)
+    Sentry.capture_exception(exception) if defined?(Sentry)
+    render json: { error: 'Internal server error' }, status: :internal_server_error
+  end
+
+  def decode_jwt(token)
+    JWT.decode(token, Rails.application.secrets.secret_key_base).first
+  rescue JWT::DecodeError
+    {}
+  end
+end
+```
+
+## Naming Conventions
+
+- **Controllers**: PluralResource + `Api::V1::` namespace → `Api::V1::UsersController`
+- **Routes**: RESTful plurals → `/api/v1/users`, `/api/v1/users/1`
+- **Methods**: Verb + subject → `create_payment_invoice`, `validate_credit_card`
+
+## Standard File Structure
+
+```
+app/controllers/
+  api/
+    v1/
+      application_controller.rb  # Base with auth & error handling
+      users_controller.rb
+      items_controller.rb
+```
+
+
+---
+name: rails-api-models
+description: "Use when: writing or reviewing Rails models for API. Best practices for validations, associations, scopes, callbacks, and database design."
+applyTo:
+  - "app/models/**/*.rb"
+---
+
+# Rails API Models
+
+## Core Principles
+
+- **Validations**: Use `validates` with multiple validators (presence, format, uniqueness, length)
+- **Scopes**: Create named scopes for common queries
+- **Associations**: Declare belongs_to, has_many, has_one with proper foreign keys
+- **Callbacks**: Keep minimal; prefer service objects for complex logic
+- **PG Arrays/JSONB**: Use modern PostgreSQL types for flexible schemas when appropriate
+
+## Model Validations
+
+### Standard Pattern
+
+```ruby
+class User < ApplicationRecord
+  validates :email, presence: true, uniqueness: true, format: { with: URI::MailTo::EMAIL_REGEXP }
+  validates :password, length: { minimum: 8 }, if: -> { new_record? || password.present? }
+  validates :age, numericality: { greater_than_or_equal_to: 18 }, allow_nil: true
+
+  # Custom validation
+  validate :password_complexity, if: -> { password.present? }
+
+  private
+
+  def password_complexity
+    errors.add(:password, "must contain uppercase, lowercase, and number") unless password.match?(/[A-Z]/) && password.match?(/[a-z]/) && password.match?(/\d/)
+  end
+end
+```
+
+### Common Validators
+
+- `presence:` - Field is required
+- `uniqueness:` - Value is unique in table
+- `length:` - String/Array length constraints
+- `format:` - Regex pattern matching
+- `numericality:` - Numeric constraints
+- `inclusion:` - Value in predefined list
+- `custom validate:` - Custom validation method
+
+## Associations & Foreign Keys
+
+```ruby
+class Order < ApplicationRecord
+  belongs_to :user
+  belongs_to :payment, optional: true  # Optional association
+  has_many :items, dependent: :destroy  # Cascade delete
+  has_many :shipments, through: :items
+
+  validates :user_id, presence: true
+end
+
+class Item < ApplicationRecord
+  belongs_to :order
+  has_one :product
+
+  # Macro must appear after associations
+  validates :name, :order_id, presence: true
+end
+```
+
+## Scopes & Query Methods
+
+```ruby
+class Item < ApplicationRecord
+  # Named scopes for common queries
+  scope :active, -> { where(status: 'active') }
+  scope :recent, -> { order(created_at: :desc) }
+  scope :by_category, ->(cat) { where(category: cat) }
+
+  # Chainable scopes
+  # Item.active.recent.by_category('books')
+
+  # Class method as alternative
+  def self.expensive
+    where('price > ?', 100)
+  end
+end
+```
+
+## Database Modeling
+
+### Key Principles
+
+- Use foreign keys for relationships
+- Add indexes on frequently queried/filtered columns
+- Use appropriate data types (UUID, JSONB, arrays for PostgreSQL)
+- Normalize data; denormalize only for performance with careful consideration
+
+### Migration Example
+
+```ruby
+class CreateItems < ActiveRecord::Migration[6.0]
+  def change
+    create_table :items do |t|
+      t.references :user, foreign_key: true, null: false
+      t.string :name, null: false
+      t.text :description
+      t.decimal :price, precision: 10, scale: 2
+      t.string :status, default: 'active'
+      t.jsonb :metadata, default: {}
+      t.timestamps
+    end
+
+    add_index :items, :status
+    add_index :items, [:user_id, :status]
+  end
+end
+```
+
+## Callbacks - Minimal Usage
+
+Callbacks can hide business logic. Prefer service objects for complex operations.
+
+```ruby
+class User < ApplicationRecord
+  # Only for simple, model-specific transformations
+  before_save :normalize_email
+  after_create :send_welcome_email  # Consider moving to background job
+
+  private
+
+  def normalize_email
+    self.email = email.downcase.strip
+  end
+
+  def send_welcome_email
+    # BETTER: Use a job instead
+    UserMailer.welcome(self).deliver_later
+  end
+end
+```
+
+## Naming Conventions
+
+- **Model file**: `user.rb` (singular)
+- **Class name**: `User` (singular, CamelCase)
+- **Table name**: `users` (plural, snake_case)
+- **Foreign key**: `user_id` (singular + \_id)
+- **Boolean methods**: `active?`, `verified?`, `admin?`
+- **Variables**: snake_case → `@current_user`, `user_email`
+
+
+---
+name: rails-api-security-and-performance
+description: "Use when: optimizing, securing, or documenting Rails APIs. Best practices for security, performance optimization, documentation, and git workflows."
+---
+
+# Rails API Security, Performance & Operations
+
+## Security
+
+### Sensitive Data Protection
+
+- **Never serialize**: Passwords, tokens, API keys, or secrets in responses
+- **Don't expose internal structure**: Hide schema, table names, internal IDs
+- **CORS Configuration**: Don't use `*` in production
+  ```ruby
+  # config/initializers/cors.rb
+  Rails.application.config.middleware.insert_before 0, Rack::Cors do
+    allow do
+      origins 'yourdomain.com'
+      resource '*', headers: :any, methods: [:get, :post, :put, :patch, :delete]
+    end
+  end
+  ```
+
+### HTTPS & Transport
+
+- **Force SSL**: `config.force_ssl = true` in production
+- **Use secure cookies**: `config.session_store :cookie_store, secure: true, http_only: true`
+- **HSTS Header**: `config.ssl_options = { hsts: { subdomains: true } }`
+
+### Authentication & Authorization
+
+- **Bearer Tokens**: Always use `Authorization: Bearer <token>` header
+- **Token Rotation**: Implement token refresh mechanism
+- **Pundit/CanCanCan**: Use for complex authorization rules
+- **Scope Queries**: `User.where(id: current_user.id)` — never return unscoped data
+  ```ruby
+  def index
+    # WRONG: @items = Item.all
+    # RIGHT:
+    @items = current_user.items.page(params[:page])
+  end
+  ```
+
+### Input Validation & Sanitization
+
+- **Strong Parameters**: Always use and whitelist params
+- **Parameterized Queries**: Rails default (never build SQL strings)
+- **Rate Limiting**: Implement per IP/user
+  ```ruby
+  # config/initializers/rack_attack.rb
+  Rack::Attack.throttle('req/ip', limit: 300, period: 5.minutes) do |req|
+    req.remote_ip
+  end
+  ```
+
+### Error Handling
+
+- **Never expose stack traces**: Only in development/staging
+- **Generic error messages**: "Invalid credentials" not "User not found"
+- **Log errors securely**: Use Sentry, don't log sensitive data
+
+```ruby
+# Avoid:
+rescue_from StandardError do |e|
+  render json: { error: e.message, backtrace: e.backtrace }
+end
+
+# Good:
+rescue_from StandardError do |e|
+  Sentry.capture_exception(e)
+  render json: { error: 'Internal server error' }, status: :internal_server_error
+end
+```
+
+## Performance Optimization
+
+### Database
+
+- **Eager Load**: Use `includes()`, `eager_load()` to prevent N+1
+- **Select Only Needed**: `.select(:id, :name)` for large resultsets
+- **Add Indexes**: On foreign keys and frequently filtered columns
+- **Transactions**: Multi-step operations must be atomic
+  ```ruby
+  ActiveRecord::Base.transaction do
+    order.update!(status: 'processing')
+    order.charge_payment!
+    order.create_shipment
+  end
+  ```
+
+### Monitoring Slow Queries
+
+```ruby
+# Gemfile
+gem 'bullet'  # Detect N+1 queries
+
+# config/environments/development.rb
+config.after_initialize do
+  Bullet.enable = true
+  Bullet.alert = true
+  Bullet.raise = true  # Raise on N+1
+end
+```
+
+### Caching
+
+- **Cache serialized responses**, not AR objects
+- Use Redis for distributed cache
+  ```ruby
+  def show
+    @item = Rails.cache.fetch("items:#{params[:id]}", expires_in: 1.hour) do
+      Item.find(params[:id])
+    end
+    render json: @item
+  end
+  ```
+
+### Pagination
+
+- **Always paginate** large collections (no unlimited results)
+- Default 25-50 items; respect user's `per_page` request
+- Include pagination metadata in response
+
+### Background Jobs (Sidekiq)
+
+Move slow operations out of request/response cycle:
+
+```ruby
+# For sending emails, processing files, heavy calculations
+class ProcessOrderJob
+  include Sidekiq::Job
+
+  def perform(order_id)
+    order = Order.find(order_id)
+    # Heavy processing here
+  end
+end
+
+# In controller:
+ProcessOrderJob.perform_later(order.id)
+render json: { status: 'processing' }, status: :accepted
+```
+
+### Asset & Response Optimization
+
+- **Compress responses**: gzip enabled by default
+- **API versioning**: Separate v1, v2 endpoints for breaking changes
+- **Pagination limits**: Cap max items per request (e.g., 100 max)
+
+## Documentation
+
+### OpenAPI/Swagger
+
+```ruby
+# Gemfile
+gem 'swagger_rails'
+
+# Rails endpoint documentation
+class Api::V1::UsersController < ApiBaseController
+  # @method POST /api/v1/users
+  # @params [String] user[email] User email
+  # @params [String] user[password] User password (min 8 chars)
+  # @response [201] User created
+  # @response [422] Validation error
+  def create
+    # ...
+  end
+end
+```
+
+### Code Comments
+
+- **Explain WHY**, not WHAT (code shows what)
+- Comment complex algorithms, edge cases, workarounds
+- Document issue/ticket references
+  ```ruby
+  # Workaround for third-party API rate limit
+  # See: https://github.com/issue/123
+  def fetch_with_backoff
+    # ...
+  end
+  ```
+
+### Endpoint Documentation
+
+Every endpoint should document:
+
+- HTTP Method & Path
+- Required/optional parameters
+- Request example
+- Response format (success & error)
+- HTTP status codes
+- Rate limits
+
+**Example**:
+
+```
+POST /api/v1/users
+Required: email, password (min 8 chars)
+Optional: first_name, last_name
+
+Request:
+  POST /api/v1/users
+  { "user": { "email": "user@example.com", "password": "SecurePass123" } }
+
+Response (201):
+  { "data": { "id": 1, "email": "user@example.com" }, "meta": { } }
+
+Response (422):
+  { "errors": [{ "field": "email", "message": "has already been taken" }] }
+```
+
+## Version Control & Git
+
+### Commit Messages
+
+```
+[API] Add user authentication endpoint
+[Fix] Validate email format in User model
+[Refactor] Extract payment logic to service
+[Deps] Update Rails to 7.0.4
+```
+
+Format:
+
+- **[Type]** - API, Fix, Feature, Refactor, Deps, Docs, Test, Perf
+- **Description** - Clear, imperative, < 50 characters
+- **Reference tickets**: Fixes #123, Related to #456
+
+### Branch Strategy
+
+- `main` - Production-ready code
+- `develop` - Integration branch
+- `feature/user-auth` - Feature branches
+- `fix/email-validation` - Bug fixes
+
+### Code Review Checklist
+
+- [ ] Follows naming conventions
+- [ ] Models validated, associations correct
+- [ ] Controllers skinny, business logic in services
+- [ ] Serializers expose only safe data
+- [ ] Error handling comprehensive
+- [ ] Tests cover success & failure paths
+- [ ] Database queries optimized (no N+1)
+- [ ] Security: no hardcoded secrets, proper auth
+- [ ] Documentation clear and complete
+- [ ] Commits logical and well-messaged
+
+## Gemfile Organization
+
+```ruby
+# Essentials
+gem 'rails', '~> 7.0.0'
+gem 'pg'  # PostgreSQL
+
+# API
+gem 'active_model_serializers', '~> 0.10.0'
+gem 'rack-cors'
+
+# Auth
+gem 'devise'
+gem 'jwt'
+gem 'pundit'
+
+# Data & Queries
+gem 'kaminari'  # Pagination
+
+# Background Jobs
+gem 'sidekiq'
+gem 'sidekiq-scheduler'
+
+# Monitoring
+gem 'sentry-rails'
+
+# Development/Test
+group :development, :test do
+  gem 'rspec-rails'
+  gem 'factory_bot_rails'
+  gem 'faker'
+end
+
+group :development do
+  gem 'bullet'        # N+1 detection
+  gem 'rack-mini-profiler'
+end
+
+group :test do
+  gem 'webmock'
+  gem 'vcr'
+  gem 'simplecov'
+  gem 'shoulda-matchers'
+end
+```
+
+## Deployment Checklist
+
+- [ ] Environment variables configured (secrets manager)
+- [ ] Database migrations run
+- [ ] SSL/HTTPS enabled
+- [ ] CORS properly configured
+- [ ] Error tracking (Sentry) enabled
+- [ ] Monitoring/APM in place
+- [ ] Rate limiting configured
+- [ ] Database backups scheduled
+- [ ] Logs centralized and accessible
+- [ ] Health check endpoint available
+
+
+---
+name: rails-api-serializers
+description: "Use when: creating or reviewing serializers for API responses. Best practices for formatting JSON output, conditional attributes, and relationships."
+applyTo:
+  - "app/serializers/**/*.rb"
+---
+
+# Rails API Serializers
+
+## Overview
+
+Serializers format model data for API responses. Use ActiveModel::Serializer or JSONAPI gems to decouple response structure from models.
+
+## Basic Serializer Pattern
+
+```ruby
+class UserSerializer < ActiveModel::Serializer
+  attributes :id, :email, :name, :created_at, :updated_at
+
+  # Include associations
+  has_many :items, serializer: ItemSerializer
+  belongs_to :organization, serializer: OrganizationSerializer
+
+  # Conditional attributes
+  attribute :phone, if: :include_contact_details?
+  attribute :admin_notes, unless: :is_public_profile?
+
+  private
+
+  def include_contact_details?
+    scope&.user == object  # Only if requesting own profile
+  end
+
+  def is_public_profile?
+    scope&.is_public  # Check if this is a public endpoint
+  end
+end
+```
+
+## Attribute Options
+
+### Include Conditionally
+
+```ruby
+class ItemSerializer < ActiveModel::Serializer
+  attributes :id, :name, :price
+
+  # Only include if scope condition met
+  attribute :stock_count, if: :is_admin?
+
+  # Include unless condition
+  attribute :internal_notes, unless: :is_public_view?
+
+  private
+
+  def is_admin?
+    scope == :admin
+  end
+
+  def is_public_view?
+    true  # Inverted logic example
+  end
+end
+```
+
+## Nested Associations
+
+```ruby
+class OrderSerializer < ActiveModel::Serializer
+  attributes :id, :number, :total
+
+  # Include associated resources
+  has_many :items, serializer: ItemSerializer
+  belongs_to :customer, serializer: CustomerSerializer
+
+  # Has one association
+  has_one :payment, serializer: PaymentSerializer
+end
+```
+
+## Custom Attributes & Methods
+
+```ruby
+class ProductSerializer < ActiveModel::Serializer
+  attributes :id, :name, :calculated_discount, :display_price
+
+  # Custom attribute (not a model field)
+  attribute :full_description do
+    "#{object.name} - #{object.description}"
+  end
+
+  # Method-based attribute
+  def calculated_discount
+    object.price_with_discount
+  end
+
+  def display_price
+    object.price.to_f.round(2)
+  end
+end
+```
+
+## JSON Output Control
+
+### Flatten Nested Data
+
+```ruby
+class UserSerializer < ActiveModel::Serializer
+  attributes :id, :email
+
+  # Flatten organization into user response
+  attribute :organization_name do
+    object.organization.name
+  end
+end
+# Response: { user: { id: 1, email: '...', organization_name: 'Acme' } }
+```
+
+### Exclude Default Timestamps
+
+```ruby
+class ItemSerializer < ActiveModel::Serializer
+  attributes :id, :name  # Explicitly list attrs to exclude created_at/updated_at
+end
+```
+
+## Scope Usage
+
+Serializers receive `scope` (usually current_user or context) to conditionally include data:
+
+```ruby
+class UserSerializer < ActiveModel::Serializer
+  attributes :id, :name
+  attribute :email, if: :show_email?
+  attribute :admin_level, if: :show_admin_info?
+
+  private
+
+  def show_email?
+    scope == object || scope&.admin?  # Show if own profile or admin
+  end
+
+  def show_admin_info?
+    scope&.admin?  # Only admins see this
+  end
+end
+
+# In controller:
+def show
+  render json: @user, serializer: UserSerializer, scope: current_user
+end
+```
+
+## Common Serializer Gem: JSONAPI
+
+For strict JSONAPI:1.0 compliance:
+
+```ruby
+class UserSerializer
+  include JSONAPI::Serializer
+
+  attributes :email, :name, :created_at
+
+  has_many :items, serializer: ItemSerializer
+  belongs_to :organization, serializer: OrganizationSerializer
+
+  attribute :display_name do |object|
+    object.name.titleize
+  end
+end
+
+# In controller:
+def show
+  render json: UserSerializer.new(@user, meta: { version: 'v1' })
+end
+```
+
+## Naming & File Organization
+
+- **Serializer file**: `user_serializer.rb` (matches model with \_serializer suffix)
+- **Class name**: `UserSerializer` (CamelCase)
+- **Location**: `/app/serializers/user_serializer.rb`
+- **For nested**: `/app/serializers/orders/item_serializer.rb` for `Orders::ItemSerializer`
+
+## Best Practices
+
+1. **Don't expose secrets**: Never serialize passwords, tokens, or API keys
+2. **Keep it simple**: Complex logic → move to presenter or decorator
+3. **Use scope**: Leverage scope parameter for permission-based serialization
+4. **Eager load**: In controller, use `.includes()` to prevent N+1
+5. **Version serializers**: Create v1/v2 serializers if API versions differ significantly
+
+```ruby
+# Good: Eager load associations
+def show
+  @order = Order.includes(:items, :customer).find(params[:id])
+  render json: @order, serializer: OrderSerializer, scope: current_user
+end
+```
+
+
+---
+name: rails-api-services
+description: "Use when: designing or reviewing service objects. Best practices for encapsulating business logic, handling transactions, and returning results."
+applyTo:
+  - "app/services/**/*.rb"
+---
+
+# Rails API Service Objects
+
+## Overview
+
+Service objects encapsulate complex business logic, transactions, and multi-step operations. They keep controllers skinny and models focused on data validation.
+
+## Basic Service Pattern
+
+```ruby
+module Users
+  class CreateService
+    def initialize(params)
+      @params = params
+    end
+
+    def call
+      @user = User.new(@params)
+      return Result.success(@user) if @user.save
+      Result.failure(@user.errors.messages)
+    end
+  end
+end
+
+# In controller:
+def create
+  result = Users::CreateService.new(user_params).call
+
+  if result.success?
+    render json: result.data, status: :created
+  else
+    render json: { errors: result.errors }, status: :unprocessable_entity
+  end
+end
+```
+
+## Result Object Pattern
+
+```ruby
+class Result
+  def self.success(data = nil, message: nil)
+    new(success: true, data: data, message: message)
+  end
+
+  def self.failure(errors = nil, message: nil)
+    new(success: false, errors: errors, message: message)
+  end
+
+  attr_reader :data, :errors, :message
+
+  def initialize(success:, data: nil, errors: nil, message: nil)
+    @success = success
+    @data = data
+    @errors = errors
+    @message = message
+  end
+
+  def success?
+    @success
+  end
+
+  def failure?
+    !@success
+  end
+end
+```
+
+## Transaction Pattern
+
+```ruby
+class Orders
+  class CreateService
+    def initialize(user, items_params)
+      @user = user
+      @items_params = items_params
+    end
+
+    def call
+      Order.transaction do
+        order = Order.create!(user: @user)
+        @items_params.each { |item_params| order.items.create!(item_params) }
+        order.charge_payment!
+        Result.success(order)
+      end
+    rescue StandardError => e
+      Result.failure(message: e.message)
+    end
+  end
+end
+```
+
+## Authentication Service
+
+```ruby
+class Users
+  class AuthenticateService
+    def initialize(email, password)
+      @email = email
+      @password = password
+    end
+
+    def call
+      user = User.find_by(email: @email)
+
+      if user&.authenticate(@password)
+        Result.success({ token: user.jwt_token, user: user })
+      else
+        Result.failure(message: 'Invalid credentials')
+      end
+    end
+  end
+end
+
+# In controller:
+def login
+  result = Users::AuthenticateService.new(params[:email], params[:password]).call
+
+  if result.success?
+    render json: result.data
+  else
+    render json: { error: result.message }, status: :unauthorized
+  end
+end
+```
+
+## Complex Multi-Step Operations
+
+```ruby
+class Orders
+  class FulfillService
+    def initialize(order_id)
+      @order = Order.find(order_id)
+    end
+
+    def call
+      ActiveRecord::Base.transaction do
+        allocate_inventory
+        generate_shipment
+        charge_payment
+        notify_customer
+        Result.success(@order)
+      end
+    rescue StandardError => e
+      Result.failure(message: "Fulfillment failed: #{e.message}")
+    end
+
+    private
+
+    def allocate_inventory
+      @order.items.each do |item|
+        raise 'Out of stock' unless item.product.decrement_stock!(item.quantity)
+      end
+    end
+
+    def generate_shipment
+      @order.create_shipment!(address: @order.shipping_address)
+    end
+
+    def charge_payment
+      @order.charge_payment!
+      @order.update!(status: 'paid')
+    end
+
+    def notify_customer
+      OrderMailer.confirmation(@order).deliver_later
+    end
+  end
+end
+```
+
+## Background Job Integration
+
+For slow operations, queue to background job:
+
+```ruby
+class Orders
+  class CreateService
+    def initialize(user, cart)
+      @user = user
+      @cart = cart
+    end
+
+    def call
+      order = create_order
+      FulfillOrderJob.perform_later(order.id)
+      Result.success(order)
+    end
+
+    private
+
+    def create_order
+      Order.create!(user: @user, items: @cart)
+    end
+  end
+end
+
+# In Sidekiq job:
+class FulfillOrderJob
+  include Sidekiq::Job
+
+  def perform(order_id)
+    order = Order.find(order_id)
+    Orders::FulfillService.new(order_id).call
+  end
+end
+```
+
+## Queries Service (Alternative Pattern)
+
+For complex queries, use Query object instead of Service:
+
+```ruby
+class Items
+  class SearchQuery
+    def initialize(relation = Item.all)
+      @relation = relation
+    end
+
+    def by_category(category)
+      @relation = @relation.where(category: category)
+      self
+    end
+
+    def by_price_range(min, max)
+      @relation = @relation.where('price BETWEEN ? AND ?', min, max)
+      self
+    end
+
+    def by_status(status)
+      @relation = @relation.where(status: status)
+      self
+    end
+
+    def results
+      @relation
+    end
+  end
+end
+
+# In controller:
+def index
+  items = Items::SearchQuery.new
+    .by_category(params[:category])
+    .by_price_range(params[:min_price], params[:max_price])
+    .by_status('active')
+    .results
+    .page(params[:page])
+
+  render json: items
+end
+```
+
+## File Organization
+
+```
+app/services/
+  users/
+    create_service.rb
+    authenticate_service.rb
+    update_service.rb
+  orders/
+    create_service.rb
+    fulfill_service.rb
+    cancel_service.rb
+  items/
+    search_query.rb
+```
+
+## Naming Conventions
+
+- **File**: `snake_case_service.rb` or `snake_case_query.rb`
+- **Class**: `Module::CamelCaseService` or `Module::CamelCaseQuery`
+- **Method**: `call` (return Result object)
+- **Result**: Use `Result.success()` / `Result.failure()` consistently
+
+## Best Practices
+
+1. **Single Responsibility**: One service = one operation
+2. **Return Result object**: Always, for consistent handling
+3. **Transactions**: Wrap multi-step operations in `ActiveRecord::Base.transaction`
+4. **Error Handling**: Rescue specific errors; re-raise or return failure as appropriate
+5. **Testing**: Services are easy to unit test (no controller/view dependency)
+
+
+---
+name: rails-api-testing
+description: "Use when: writing tests for Rails API controllers, models, and services. Best practices for RSpec, test organization, and test patterns."
+applyTo:
+  - "test/**/*.rb"
+  - "spec/**/*.rb"
+---
+
+# Rails API Testing
+
+## Setup
+
+### Gemfile Dependencies
+
+```ruby
+group :test, :development do
+  gem 'rspec-rails'
+  gem 'factory_bot_rails'
+  gem 'faker'
+end
+
+group :test do
+  gem 'webmock'
+  gem 'vcr'
+  gem 'simplecov'
+  gem 'shoulda-matchers'
+end
+```
+
+### RSpec Configuration
+
+```ruby
+# spec/rails_helper.rb or spec/spec_helper.rb
+RSpec.configure do |config|
+  config.include FactoryBot::Syntax::Methods
+
+  # Shoulda matchers
+  Shoulda::Matchers.configure do |config|
+    config.integrate do |with|
+      with.test_framework :rspec
+      with.library :rails
+    end
+  end
+
+  # Use transactional fixtures
+  config.use_transactional_fixtures = true
+end
+```
+
+## Model Specs
+
+```ruby
+RSpec.describe User, type: :model do
+  describe 'validations' do
+    it { is_expected.to validate_presence_of(:email) }
+    it { is_expected.to validate_uniqueness_of(:email) }
+    it { is_expected.to validate_length_of(:password).is_at_least(8) }
+
+    # Custom validation
+    it 'validates password complexity' do
+      user = build(:user, password: 'password')
+      expect(user).not_to be_valid
+      expect(user.errors[:password]).to include('must contain uppercase, lowercase, and number')
+    end
+  end
+
+  describe 'associations' do
+    it { is_expected.to have_many(:items) }
+    it { is_expected.to belong_to(:organization).optional }
+  end
+
+  describe '#full_name' do
+    it 'returns concatenated first and last name' do
+      user = build(:user, first_name: 'John', last_name: 'Doe')
+      expect(user.full_name).to eq('John Doe')
+    end
+  end
+
+  describe '.active' do
+    let!(:active_user) { create(:user, status: 'active') }
+    let!(:inactive_user) { create(:user, status: 'inactive') }
+
+    it 'returns only active users' do
+      expect(User.active).to include(active_user)
+      expect(User.active).not_to include(inactive_user)
+    end
+  end
+end
+```
+
+## Controller/Request Specs
+
+```ruby
+RSpec.describe Api::V1::UsersController, type: :request do
+  let(:user) { create(:user) }
+  let(:auth_headers) { { 'Authorization' => "Bearer #{user.jwt_token}" } }
+
+  describe 'POST #create' do
+    context 'with valid params' do
+      let(:params) { { user: attributes_for(:user) } }
+
+      it 'creates a new user' do
+        expect {
+          post '/api/v1/users', params: params
+        }.to change(User, :count).by(1)
+      end
+
+      it 'returns 201 Created' do
+        post '/api/v1/users', params: params
+        expect(response).to have_http_status(:created)
+      end
+
+      it 'returns user data' do
+        post '/api/v1/users', params: params
+        json_response = JSON.parse(response.body)
+        expect(json_response['data']['email']).to eq(params[:user][:email])
+      end
+
+      it 'returns location header' do
+        post '/api/v1/users', params: params
+        expect(response.location).to include(User.last.id.to_s)
+      end
+    end
+
+    context 'with invalid params' do
+      let(:params) { { user: { email: 'invalid' } } }
+
+      it 'returns 422 Unprocessable Entity' do
+        post '/api/v1/users', params: params
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+
+      it 'returns error messages' do
+        post '/api/v1/users', params: params
+        json_response = JSON.parse(response.body)
+        expect(json_response['errors']).to be_present
+      end
+
+      it 'does not create user' do
+        expect {
+          post '/api/v1/users', params: params
+        }.not_to change(User, :count)
+      end
+    end
+  end
+
+  describe 'GET #index' do
+    before { create_list(:user, 3) }
+
+    it 'returns 200 OK' do
+      get '/api/v1/users', headers: auth_headers
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'returns paginated users' do
+      get '/api/v1/users', params: { page: 1, per_page: 10 }, headers: auth_headers
+      json_response = JSON.parse(response.body)
+      expect(json_response['data'].length).to eq(3)
+    end
+
+    it 'returns pagination metadata' do
+      get '/api/v1/users', headers: auth_headers
+      json_response = JSON.parse(response.body)
+      expect(json_response['meta']).to include('page', 'per_page', 'total_count')
+    end
+
+    context 'when not authenticated' do
+      it 'returns 401 Unauthorized' do
+        get '/api/v1/users'
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+  end
+
+  describe 'GET #show' do
+    it 'returns the user' do
+      get "/api/v1/users/#{user.id}", headers: auth_headers
+      expect(response).to have_http_status(:ok)
+      json_response = JSON.parse(response.body)
+      expect(json_response['data']['id']).to eq(user.id)
+    end
+
+    it 'returns 404 if not found' do
+      get '/api/v1/users/999', headers: auth_headers
+      expect(response).to have_http_status(:not_found)
+    end
+
+    context 'when not owner' do
+      let(:other_user) { create(:user) }
+
+      it 'returns 403 Forbidden' do
+        get "/api/v1/users/#{other_user.id}", headers: auth_headers
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+  end
+end
+```
+
+## Service Specs
+
+```ruby
+RSpec.describe Users::CreateService do
+  describe '#call' do
+    context 'with valid params' do
+      let(:params) { attributes_for(:user) }
+
+      it 'creates a user' do
+        expect {
+          Users::CreateService.new(params).call
+        }.to change(User, :count).by(1)
+      end
+
+      it 'returns success result' do
+        result = Users::CreateService.new(params).call
+        expect(result).to be_a(Result)
+        expect(result.success?).to be true
+      end
+
+      it 'returns created user in result data' do
+        result = Users::CreateService.new(params).call
+        expect(result.data).to be_a(User)
+        expect(result.data.email).to eq(params[:email])
+      end
+    end
+
+    context 'with invalid params' do
+      let(:params) { attributes_for(:user, email: 'invalid') }
+
+      it 'does not create user' do
+        expect {
+          Users::CreateService.new(params).call
+        }.not_to change(User, :count)
+      end
+
+      it 'returns failure result' do
+        result = Users::CreateService.new(params).call
+        expect(result.failure?).to be true
+      end
+
+      it 'returns errors' do
+        result = Users::CreateService.new(params).call
+        expect(result.errors).to include(:email)
+      end
+    end
+  end
+end
+```
+
+## Factory Definitions
+
+```ruby
+# spec/factories/users.rb
+FactoryBot.define do
+  factory :user do
+    email { Faker::Internet.email }
+    password { 'SecurePass123' }
+    first_name { Faker::Name.first_name }
+    last_name { Faker::Name.last_name }
+    status { 'active' }
+
+    trait :admin do
+      role { 'admin' }
+    end
+
+    trait :inactive do
+      status { 'inactive' }
+    end
+
+    trait :with_items do
+      after(:create) { |user| create_list(:item, 3, user: user) }
+    end
+  end
+end
+
+# Usage:
+# create(:user)
+# create(:user, :admin)
+# create(:user, :with_items)
+```
+
+## Shared Examples & Contexts
+
+```ruby
+# spec/support/shared_contexts.rb
+RSpec.shared_context 'authenticated user' do
+  let(:user) { create(:user) }
+  let(:auth_headers) { { 'Authorization' => "Bearer #{user.jwt_token}" } }
+end
+
+RSpec.shared_examples 'requires authentication' do
+  it 'returns 401 without auth' do
+    send(http_method, path)
+    expect(response).to have_http_status(:unauthorized)
+  end
+end
+
+# Usage in spec:
+RSpec.describe Api::V1::ItemsController, type: :request do
+  include_context 'authenticated user'
+
+  describe 'GET #index' do
+    it_behaves_like 'requires authentication' do
+      let(:http_method) { :get }
+      let(:path) { '/api/v1/items' }
+    end
+  end
+end
+```
+
+## Mocking & VCR
+
+```ruby
+# spec/spec_helper.rb
+VCR.configure do |config|
+  config.cassette_library_dir = 'spec/cassettes'
+  config.hook_into :webmock
+  config.configure_rspec_metadata!
+end
+
+# In spec:
+RSpec.describe ExternalService, type: :service do
+  it 'fetches data from external API', :vcr do
+    result = ExternalService.new.fetch
+    expect(result).to be_success
+  end
+end
+```
+
+## Test Organization Best Practices
+
+1. **One spec file per model/controller/service**
+2. **Describe blocks for methods/endpoints**
+3. **Context blocks for conditions**
+4. **It blocks for single assertions**
+5. **Use factories over fixtures**
+6. **Mock external APIs with VCR**
+7. **Test success AND failure paths**
+8. **Test authorization & authentication**
+9. **Use before hooks for setup**
+10. **Use let/let! for test data**
+
+## Coverage Target
+
+Aim for:
+
+- **Models**: 90%+ coverage
+- **Controllers**: 85%+ coverage
+- **Services**: 90%+ coverage
+- **Use simplecov** to track: `bundle exec rspec --require spec_helper`
