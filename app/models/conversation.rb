@@ -1,0 +1,11 @@
+class Conversation < ApplicationRecord
+  belongs_to :user
+
+  validates :title, presence: true
+
+  scope :active, -> { where(deleted_at: nil) }
+
+  def soft_delete(user)
+    update(deleted_at: Time.current, deleted_by: user.id)
+  end
+end
