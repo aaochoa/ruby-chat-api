@@ -6,11 +6,18 @@ module Api
 
       def index
         conversations = current_user.conversations.active
-        render json: conversations.collect { |c| ConversationSerializer.new(c).as_json }, status: :ok
+        serializer = conversations.collect do |c|
+          s = ConversationSerializer.new(c)
+          s.with_messages if params[:include_messages] == 'true'
+          s.as_json
+        end
+        render json: serializer, status: :ok
       end
 
       def show
-        render json: ConversationSerializer.new(@conversation).as_json, status: :ok
+        serializer = ConversationSerializer.new(@conversation)
+        serializer.with_messages if params[:include_messages] == 'true'
+        render json: serializer.as_json, status: :ok
       end
 
       def create
