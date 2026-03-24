@@ -7,7 +7,9 @@ Rails.application.routes.draw do
       post 'auth/login', to: 'auth#login'
       get 'auth/profile', to: 'auth#profile'
 
-      resources :conversations
+      resources :conversations do
+        resources :messages, only: [:index, :create, :show]
+      end
     end
   end
 
