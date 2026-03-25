@@ -1,6 +1,7 @@
 module Api
   module V1
     class AuthController < ApplicationController
+      wrap_parameters false
       before_action :authenticate_user!, only: [:profile]
 
       def register
