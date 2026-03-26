@@ -10,6 +10,8 @@ Rails.application.routes.draw do
       resources :conversations do
         resources :messages, only: [:index, :create, :show]
       end
+
+      resources :friendships, only: [:index, :create, :update, :destroy]
     end
   end
 

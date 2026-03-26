@@ -7,6 +7,8 @@ class User < ApplicationRecord
 
   has_many :conversations, dependent: :destroy
   has_many :sent_messages, class_name: "Message", foreign_key: :sender_id, dependent: :destroy
+  has_many :friendships, dependent: :destroy
+  has_many :friends, through: :friendships
 
   validates :email, presence: true, uniqueness: true, format: { with: URI::MailTo::EMAIL_REGEXP }
 
