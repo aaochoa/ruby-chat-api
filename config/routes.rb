@@ -11,7 +11,9 @@ Rails.application.routes.draw do
         resources :messages, only: [:index, :create, :show]
       end
 
-      resources :friendships, only: [:index, :create, :update, :destroy]
+      resources :friendships, only: [:index, :create, :destroy] do
+        resource :acceptance, only: :create, module: :friendships
+      end
     end
   end
 

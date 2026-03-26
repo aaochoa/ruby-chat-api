@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "ruby-on-rails-best-practices": {
+      "source": "sergiodxa/agent-skills",
+      "sourceType": "github",
+      "computedHash": "74112454ed35af21a06e076fa9df7283dca2c116f62010618e56f49aa129c656"
+    }
+  }
+}

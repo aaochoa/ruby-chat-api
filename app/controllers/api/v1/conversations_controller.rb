@@ -21,9 +21,7 @@ module Api
       end
 
       def create
-        cp = conversation_params
-        cp[:title] = "New Conversation #{current_user.conversations.count + 1}" if cp[:title].blank?
-        conversation = current_user.conversations.new(cp)
+        conversation = current_user.conversations.new(conversation_params)
 
         if conversation.save
           render json: ConversationSerializer.new(conversation).as_json, status: :created

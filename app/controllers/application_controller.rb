@@ -10,8 +10,8 @@ class ApplicationController < ActionController::API
 
     begin
       payload = Warden::JWTAuth::TokenDecoder.new.call(token)
-      @current_user = User.find_by(id: payload['sub'])
-      handle_jwt_invalid unless @current_user
+      Current.user = User.find_by(id: payload['sub'])
+      handle_jwt_invalid unless Current.user
     rescue JWT::ExpiredSignature => e
       handle_jwt_expired(e)
     rescue JWT::DecodeError => e
@@ -20,7 +20,7 @@ class ApplicationController < ActionController::API
   end
 
   def current_user
-    @current_user
+    Current.user
   end
 
   def extract_token_from_header
