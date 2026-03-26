@@ -20,18 +20,6 @@ module Api
         end
       end
 
-      def update
-        if @friendship.friend_id == current_user.id && @friendship.pending?
-          if @friendship.accepted!
-            render json: { message: 'Friend request accepted' }, status: :ok
-          else
-            render json: { errors: @friendship.errors.full_messages }, status: :unprocessable_entity
-          end
-        else
-          render json: { error: 'Invalid operation' }, status: :forbidden
-        end
-      end
-
       def destroy
         if @friendship.user_id == current_user.id || @friendship.friend_id == current_user.id
           @friendship.destroy
