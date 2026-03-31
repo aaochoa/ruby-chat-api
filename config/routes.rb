@@ -14,6 +14,9 @@ Rails.application.routes.draw do
       resources :friendships, only: [:index, :create, :destroy] do
         resource :acceptance, only: :create, module: :friendships
       end
+
+      get 'users/search', to: 'users#search'
+      patch 'users/profile', to: 'users#update_profile'
     end
   end
 

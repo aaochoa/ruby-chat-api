@@ -22,8 +22,8 @@ default: &default
 development:
   <<: *default
   database: chat_api_development
-  username: postgres
-  password: notiene
+  username: local_dev
+  password: sinpassword
   host: localhost
 
   # The specified database role being used to connect to PostgreSQL.

@@ -2,7 +2,7 @@ module Api
   module V1
     class FriendshipsController < ApplicationController
       before_action :authenticate_user!
-      before_action :set_friendship, only: [:update, :destroy]
+      before_action :set_friendship, only: [ :destroy ]
 
       def index
         friends = current_user.friends
@@ -12,9 +12,9 @@ module Api
       def create
         friendship = current_user.friendships.new(friendship_params)
         friendship.status = :pending
-        
+
         if friendship.save
-          render json: { message: 'Friend request sent', friendship: friendship }, status: :created
+          render json: { message: "Friend request sent", friendship: friendship }, status: :created
         else
           render json: { errors: friendship.errors.full_messages }, status: :unprocessable_entity
         end
@@ -25,7 +25,7 @@ module Api
           @friendship.destroy
           head :no_content
         else
-          render json: { error: 'Not authorized' }, status: :unauthorized
+          render json: { error: "Not authorized" }, status: :unauthorized
         end
       end
 
@@ -34,7 +34,7 @@ module Api
       def set_friendship
         @friendship = Friendship.find(params[:id])
       rescue ActiveRecord::RecordNotFound
-        render json: { error: 'Friendship not found' }, status: :not_found
+        render json: { error: "Friendship not found" }, status: :not_found
       end
 
       def friendship_params
