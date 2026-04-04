@@ -3,7 +3,7 @@ require 'rails_helper'
 RSpec.describe User, type: :model do
   describe 'validations' do
     it { is_expected.to validate_presence_of(:email) }
-    
+
     it 'validates uniqueness of email' do
       create(:user, email: 'test@example.com')
       user = build(:user, email: 'test@example.com')
@@ -55,7 +55,7 @@ RSpec.describe User, type: :model do
     end
 
     it 'excludes specific IDs (friends)' do
-      results = User.searchable_by('John', me.id, [user_a.id])
+      results = User.searchable_by('John', me.id, [ user_a.id ])
       expect(results).to contain_exactly(user_c)
     end
   end

@@ -19,7 +19,7 @@ RSpec.describe "Api::V1::Messages", type: :request do
   end
 
   describe "POST /api/v1/conversations/:conversation_id/messages" do
-    let(:valid_params) { { body: "Hello world", recipient_ids: [recipient.id] } }
+    let(:valid_params) { { body: "Hello world", recipient_ids: [ recipient.id ] } }
 
     it "creates a new message" do
       expect {
@@ -34,8 +34,8 @@ RSpec.describe "Api::V1::Messages", type: :request do
 
     it "handles media attachments" do
       file = fixture_file_upload('spec/fixtures/files/sample.png', 'image/png')
-      post "/api/v1/conversations/#{conversation.id}/messages", params: { media: file, recipient_ids: [recipient.id] }, headers: headers
-      
+      post "/api/v1/conversations/#{conversation.id}/messages", params: { media: file, recipient_ids: [ recipient.id ] }, headers: headers
+
       expect(response).to have_http_status(:created)
       expect(Message.last.media).to be_attached
     end

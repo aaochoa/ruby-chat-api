@@ -16,10 +16,10 @@ RSpec.describe "Api::V1::Users", type: :request do
 
     it "returns matching users excluding friends and self" do
       get api_v1_users_search_path(query: 'User'), headers: headers, as: :json
-      
+
       expect(response).to have_http_status(:ok)
       json = JSON.parse(response.body)
-      
+
       emails = json.map { |u| u['email'] }
       expect(emails).to include(other.email)
       expect(emails).not_to include(friend.email)
@@ -37,7 +37,7 @@ RSpec.describe "Api::V1::Users", type: :request do
   describe "PATCH /api/v1/users/profile" do
     it "updates the user profile" do
       patch api_v1_users_profile_path, params: { user: { first_name: 'NewFirst', last_name: 'NewLast' } }, headers: headers, as: :json
-      
+
       expect(response).to have_http_status(:ok)
       user.reload
       expect(user.first_name).to eq('NewFirst')

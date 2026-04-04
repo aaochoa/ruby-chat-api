@@ -11,7 +11,7 @@ RSpec.describe "Api::V1::Friendships", type: :request do
 
       get api_v1_friendships_path, headers: auth_headers(user), as: :json
       expect(response).to have_http_status(:ok)
-      
+
       json = JSON.parse(response.body)
       expect(json.size).to eq(1)
       expect(json.first['id']).to eq(other_user.id)
@@ -21,9 +21,9 @@ RSpec.describe "Api::V1::Friendships", type: :request do
   describe "POST /api/v1/friendships" do
     it "sends a friend request" do
       expect {
-        post api_v1_friendships_path, 
-             params: { friendship: { friend_id: other_user.id } }, 
-             headers: auth_headers(user), 
+        post api_v1_friendships_path,
+             params: { friendship: { friend_id: other_user.id } },
+             headers: auth_headers(user),
              as: :json
       }.to change(Friendship, :count).by(1)
 

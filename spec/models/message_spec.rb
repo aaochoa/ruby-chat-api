@@ -10,7 +10,7 @@ RSpec.describe Message, type: :model do
 
   context "when media is attached" do
     let(:message) { build(:message, body: nil) }
-    
+
     before do
       message.media.attach(io: File.open(Rails.root.join('spec/fixtures/files/sample.png')), filename: 'sample.png', content_type: 'image/png')
       message.save
