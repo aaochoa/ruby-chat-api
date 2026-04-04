@@ -23,7 +23,7 @@ development:
   <<: *default
   database: <%= ENV.fetch("DB_NAME", "chat_api_development") %>
   username: <%= ENV.fetch("DB_USERNAME", "local_dev") %>
-  password: <%= ENV.fetch("DB_PASSWORD", "") %>
+  password: <%= ENV.fetch("DB_PASSWORD", "sinpassword") %>
   host: <%= ENV.fetch("DB_HOST", "localhost") %>
 
   # The specified database role being used to connect to PostgreSQL.
