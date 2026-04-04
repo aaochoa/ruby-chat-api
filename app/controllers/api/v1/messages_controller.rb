@@ -20,6 +20,7 @@ module Api
         message.receiver_ids = params[:recipient_ids]
 
         if message.save
+          broadcast_message(message)
           render json: MessageSerializer.new(message).as_json, status: :created
         else
           render json: { errors: message.errors.full_messages }, status: :unprocessable_entity
@@ -27,6 +28,13 @@ module Api
       end
 
       private
+
+      def broadcast_message(message)
+        ActionCable.server.broadcast(
+          "chat_conversation_#{message.conversation_id}",
+          MessageSerializer.new(message).as_json
+        )
+      end
 
       def set_message
         @message = @conversation.messages.find(params[:id])

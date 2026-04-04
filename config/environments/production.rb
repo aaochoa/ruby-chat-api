@@ -72,6 +72,12 @@ Rails.application.configure do
   # Do not dump schema after migrations.
   config.active_record.dump_schema_after_migration = false
 
+  # Action Cable: restrict WebSocket connections to known origins in production.
+  config.action_cable.url = ENV.fetch("ACTION_CABLE_URL", "wss://#{ENV.fetch('APP_HOST', 'example.com')}/cable")
+  config.action_cable.allowed_request_origins = [
+    /\Ahttps?:\/\/#{Regexp.escape(ENV.fetch('APP_HOST', 'example.com'))}/
+  ]
+
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 

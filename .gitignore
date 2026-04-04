@@ -32,3 +32,4 @@
 /config/*.key
 
 .DS_Store
+.env
