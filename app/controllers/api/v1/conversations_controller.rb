@@ -2,13 +2,13 @@ module Api
   module V1
     class ConversationsController < ApplicationController
       before_action :authenticate_user!
-      before_action :set_conversation, only: [:show, :update, :destroy]
+      before_action :set_conversation, only: [ :show, :update, :destroy ]
 
       def index
         conversations = current_user.conversations.active
         serializer = conversations.collect do |c|
           s = ConversationSerializer.new(c)
-          s.with_messages if params[:include_messages] == 'true'
+          s.with_messages if params[:include_messages] == "true"
           s.as_json
         end
         render json: serializer, status: :ok
@@ -16,7 +16,7 @@ module Api
 
       def show
         serializer = ConversationSerializer.new(@conversation)
-        serializer.with_messages if params[:include_messages] == 'true'
+        serializer.with_messages if params[:include_messages] == "true"
         render json: serializer.as_json, status: :ok
       end
 
@@ -40,9 +40,9 @@ module Api
 
       def destroy
         if @conversation.soft_delete(current_user)
-          render json: { message: 'Conversation soft-deleted' }, status: :ok
+          render json: { message: "Conversation soft-deleted" }, status: :ok
         else
-          render json: { errors: 'Unable to delete conversation' }, status: :unprocessable_entity
+          render json: { errors: "Unable to delete conversation" }, status: :unprocessable_entity
         end
       end
 
@@ -51,7 +51,7 @@ module Api
       def set_conversation
         @conversation = current_user.conversations.active.find(params[:id])
       rescue ActiveRecord::RecordNotFound
-        render json: { error: 'Conversation not found' }, status: :not_found
+        render json: { error: "Conversation not found" }, status: :not_found
       end
 
       def conversation_params

@@ -1,19 +1,22 @@
 Rails.application.routes.draw do
   # devise_for :users # Handled manually in API
-  
+
   namespace :api do
     namespace :v1 do
-      post 'auth/register', to: 'auth#register'
-      post 'auth/login', to: 'auth#login'
-      get 'auth/profile', to: 'auth#profile'
+      post "auth/register", to: "auth#register"
+      post "auth/login", to: "auth#login"
+      get "auth/profile", to: "auth#profile"
 
       resources :conversations do
-        resources :messages, only: [:index, :create, :show]
+        resources :messages, only: [ :index, :create, :show ]
       end
 
-      resources :friendships, only: [:index, :create, :destroy] do
+      resources :friendships, only: [ :index, :create, :destroy ] do
         resource :acceptance, only: :create, module: :friendships
       end
+
+      get "users/search", to: "users#search"
+      patch "users/profile", to: "users#update_profile"
     end
   end
 

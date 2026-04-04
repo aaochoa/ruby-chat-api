@@ -13,6 +13,6 @@ class Conversation < ApplicationRecord
 
   private
     def set_default_title
-      self.title ||= "New Conversation #{user.conversations.count + 1}"
+      self.title ||= "New Conversation #{user&.conversations&.count.to_i + 1}"
     end
 end

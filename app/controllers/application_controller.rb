@@ -10,7 +10,7 @@ class ApplicationController < ActionController::API
 
     begin
       payload = Warden::JWTAuth::TokenDecoder.new.call(token)
-      Current.user = User.find_by(id: payload['sub'])
+      Current.user = User.find_by(id: payload["sub"] || payload["id"])
       handle_jwt_invalid unless Current.user
     rescue JWT::ExpiredSignature => e
       handle_jwt_expired(e)
@@ -24,18 +24,18 @@ class ApplicationController < ActionController::API
   end
 
   def extract_token_from_header
-    request.headers['Authorization']&.split('Bearer ')&.last
+    request.headers["Authorization"]&.split("Bearer ")&.last
   end
 
   def handle_jwt_invalid(e = nil)
-    render json: { error: 'Invalid JWT' }, status: :unauthorized
+    render json: { error: "Invalid JWT" }, status: :unauthorized
   end
 
   def handle_jwt_expired(e = nil)
-    render json: { error: 'Expired JWT' }, status: :unauthorized
+    render json: { error: "Expired JWT" }, status: :unauthorized
   end
 
   def handle_jwt_missing
-    render json: { error: 'Missing JWT' }, status: :unauthorized
+    render json: { error: "Missing JWT" }, status: :unauthorized
   end
 end

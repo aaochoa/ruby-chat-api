@@ -14,7 +14,7 @@ RSpec.describe "Api::V1::Conversations", type: :request do
 
       get api_v1_conversations_path, headers: auth_headers(user), as: :json
       expect(response).to have_http_status(:ok)
-      
+
       json = JSON.parse(response.body)
       expect(json.size).to eq(1)
       expect(json.first['title']).to eq("Mine")
@@ -89,7 +89,7 @@ RSpec.describe "Api::V1::Conversations", type: :request do
     it "soft-deletes the conversation" do
       delete api_v1_conversation_path(conversation), headers: auth_headers(user), as: :json
       expect(response).to have_http_status(:ok)
-      
+
       conversation.reload
       expect(conversation.deleted_at).not_to be_nil
       expect(conversation.deleted_by).to eq(user.id)

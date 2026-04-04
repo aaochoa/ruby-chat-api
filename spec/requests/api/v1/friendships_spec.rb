@@ -11,7 +11,7 @@ RSpec.describe "Api::V1::Friendships", type: :request do
 
       get api_v1_friendships_path, headers: auth_headers(user), as: :json
       expect(response).to have_http_status(:ok)
-      
+
       json = JSON.parse(response.body)
       expect(json.size).to eq(1)
       expect(json.first['id']).to eq(other_user.id)
@@ -21,9 +21,9 @@ RSpec.describe "Api::V1::Friendships", type: :request do
   describe "POST /api/v1/friendships" do
     it "sends a friend request" do
       expect {
-        post api_v1_friendships_path, 
-             params: { friendship: { friend_id: other_user.id } }, 
-             headers: auth_headers(user), 
+        post api_v1_friendships_path,
+             params: { friendship: { friend_id: other_user.id } },
+             headers: auth_headers(user),
              as: :json
       }.to change(Friendship, :count).by(1)
 
@@ -36,7 +36,7 @@ RSpec.describe "Api::V1::Friendships", type: :request do
     let(:friendship) { create(:friendship, user: other_user, friend: user, status: :pending) }
 
     it "accepts a friend request" do
-      patch api_v1_friendship_path(friendship), headers: auth_headers(user), as: :json
+      post api_v1_friendship_acceptance_path(friendship), headers: auth_headers(user), as: :json
       expect(response).to have_http_status(:ok)
       expect(friendship.reload.status).to eq('accepted')
       expect(Friendship.count).to eq(2) # Original + Mirror
@@ -44,7 +44,7 @@ RSpec.describe "Api::V1::Friendships", type: :request do
 
     it "returns forbidden if not the recipient" do
       third_user = create(:user)
-      patch api_v1_friendship_path(friendship), headers: auth_headers(third_user), as: :json
+      post api_v1_friendship_acceptance_path(friendship), headers: auth_headers(third_user), as: :json
       expect(response).to have_http_status(:forbidden)
     end
   end

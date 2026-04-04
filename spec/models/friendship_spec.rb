@@ -29,7 +29,7 @@ RSpec.describe Friendship, type: :model do
 
     it 'creates a mirror friendship when status changes to accepted' do
       friendship = create(:friendship, user: user, friend: friend, status: :pending)
-      
+
       expect {
         friendship.accepted!
       }.to change(Friendship, :count).by(1)
@@ -44,7 +44,7 @@ RSpec.describe Friendship, type: :model do
       # Creating the second record manually or via callback above
       # Actually, the callback would have created it if we used .accepted!
       # Let's reload to be sure.
-      
+
       expect(Friendship.count).to eq(2)
 
       expect {
