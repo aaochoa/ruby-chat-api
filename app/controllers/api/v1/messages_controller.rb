@@ -1,9 +1,9 @@
 module Api
   module V1
     class MessagesController < ApplicationController
-      include ConversationScoped
-
       before_action :authenticate_user!
+
+      include ConversationScoped
       before_action :set_message, only: [ :show ]
 
       def index

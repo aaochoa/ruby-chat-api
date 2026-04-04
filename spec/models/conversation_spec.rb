@@ -6,7 +6,12 @@ RSpec.describe Conversation, type: :model do
   end
 
   describe 'validations' do
-    it { should validate_presence_of(:title) }
+    it "sets a default title via callback when title is blank" do
+      user = create(:user)
+      conversation = Conversation.new(user: user, title: nil)
+      conversation.valid?
+      expect(conversation.title).to be_present
+    end
   end
 
   describe 'scopes' do
