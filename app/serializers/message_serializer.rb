@@ -6,13 +6,14 @@ class MessageSerializer
   def as_json
     {
       id: @message.id,
-      body: @message.body,
-      conversation_id: @message.conversation_id,
+      content: @message.body,
+      conversationId: @message.conversation_id,
+      senderId: @message.sender_id,
       sender: UserSerializer.new(@message.sender).as_json,
       receivers: @message.receivers.collect { |u| UserSerializer.new(u).as_json },
-      media_url: media_url,
-      created_at: @message.created_at,
-      updated_at: @message.updated_at
+      mediaUrl: media_url,
+      createdAt: @message.created_at,
+      updatedAt: @message.updated_at
     }
   end
 

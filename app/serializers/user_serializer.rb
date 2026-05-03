@@ -7,9 +7,9 @@ class UserSerializer
     {
       id: @user.id,
       email: @user.email,
-      first_name: @user.first_name,
-      last_name: @user.last_name,
-      created_at: @user.created_at
+      firstName: @user.first_name,
+      lastName: @user.last_name,
+      createdAt: @user.created_at
     }
   end
 end
