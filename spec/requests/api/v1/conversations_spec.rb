@@ -17,7 +17,7 @@ RSpec.describe "Api::V1::Conversations", type: :request do
 
       json = JSON.parse(response.body)
       expect(json.size).to eq(1)
-      expect(json.first['title']).to eq("Mine")
+      expect(json.first['name']).to eq("Mine")
     end
 
     it "returns unauthorized when missing token" do
@@ -34,7 +34,7 @@ RSpec.describe "Api::V1::Conversations", type: :request do
         }.to change(Conversation, :count).by(1)
 
         expect(response).to have_http_status(:created)
-        expect(JSON.parse(response.body)['user_id']).to eq(user.id)
+        expect(JSON.parse(response.body)['userId']).to eq(user.id)
       end
     end
 
