@@ -29,7 +29,7 @@ RSpec.describe "Api::V1::Messages", type: :request do
 
       expect(response).to have_http_status(:created)
       json = JSON.parse(response.body)
-      expect(json['body']).to eq("Hello world")
+      expect(json['content']).to eq("Hello world")
     end
 
     it "handles media attachments" do

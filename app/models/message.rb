@@ -2,6 +2,8 @@ class Message < ApplicationRecord
   belongs_to :conversation
   belongs_to :sender, class_name: "User"
 
+  encrypts :body
+
   has_many :message_recipients, dependent: :destroy
   has_many :receivers, through: :message_recipients, source: :user
 
